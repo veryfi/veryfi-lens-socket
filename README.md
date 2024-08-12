@@ -2,7 +2,7 @@
 
 <img  src="https://user-images.githubusercontent.com/30125790/212157486-bfd08c5d-9337-4b78-be6f-230dc63838ba.png#gh-light-mode-only"  width="200">
 
-# Veryfi Lens for Web 
+# Veryfi Lens for Browser 
 
 Veryfi Lens for Web SDK is a framework for your web app to give it document capture superpowers in minutes.
 
