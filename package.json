@@ -1,0 +1,13 @@
+{
+  "name": "veryfi-lens-socket",
+  "version": "1.2.5",
+  "description": "Lens For Browser Socket SDK",
+  "main": "veryfi-lens.js",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/veryfi/veryfi-lens-socket"
+  },
+  "author": "George Veryfi",
+  "license": "MIT"
+}
