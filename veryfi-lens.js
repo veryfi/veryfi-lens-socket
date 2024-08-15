@@ -10,8 +10,6 @@ const VeryfiLens = (function () {
   const LENS_SESSION_KEY_SEPARATOR = "LENS_SESSION_KEY";
   const MAX_SHAPE = 512.0;
   const SOCKET_URL = "wss://lens.veryfi.com/ws/crop";
-  const VALIDATE_URL = "https://lens.veryfi.com/rest/validate_partner";
-  const PROCESS_URL = "https://lens.veryfi.com/rest/process";
   const SOCKET_STATUSES = [
     {
       value: 0,
@@ -60,6 +58,7 @@ const VeryfiLens = (function () {
   let blurStatus = "";
   let variance;
   let cvReady = false;
+  let torchTrack;
 
   const releaseCanvas = (canvas) => {
     if (canvas) {
@@ -136,6 +135,27 @@ const VeryfiLens = (function () {
       frameCanvas.height = video.videoHeight;
       const ctx = frameCanvas.getContext("2d");
       if (ctx) ctx.drawImage(video, 0, 0);
+    }
+  };
+
+  const toggleTorchLight = async () => {
+    if (torchTrack) {
+      const capabilities = torchTrack.getCapabilities();
+      if (capabilities.torch) {
+        try {
+          await torchTrack.applyConstraints({
+            advanced: [
+              { torch: !torchTrack.getConstraints().advanced?.[0]?.torch },
+            ],
+          });
+        } catch (err) {
+          console.error("Error toggling torch:", err);
+        }
+      } else {
+        console.log("Torch not supported on this device");
+      }
+    } else {
+      console.log("Camera not initialized");
     }
   };
 
@@ -217,7 +237,6 @@ const VeryfiLens = (function () {
           aspectRatio: isDesktop ? 9 / 16 : 16 / 9,
           width: { ideal: 3840 },
           height: { ideal: 2160 },
-          advanced: [{ torch: true }],
         };
 
         if (isAndroid) {
@@ -260,27 +279,6 @@ const VeryfiLens = (function () {
       }
     } else {
       console.log("No navigator available");
-    }
-  };
-
-  const toggleTorchLight = async () => {
-    if (torchTrack) {
-      const capabilities = torchTrack.getCapabilities();
-      if (capabilities.torch) {
-        try {
-          await torchTrack.applyConstraints({
-            advanced: [
-              { torch: !torchTrack.getConstraints().advanced?.[0]?.torch },
-            ],
-          });
-        } catch (err) {
-          console.error("Error toggling torch:", err);
-        }
-      } else {
-        console.log("Torch not supported on this device");
-      }
-    } else {
-      console.log("Camera not initialized");
     }
   };
 
@@ -414,27 +412,6 @@ const VeryfiLens = (function () {
     // return [topLeft, topRight, bottomLeft, bottomRight];
   };
 
-  const fetchSessionId = async (clientId) => {
-    return await fetch(VALIDATE_URL, {
-      method: "POST",
-      headers: {
-        "CLIENT-ID": clientId,
-      },
-    })
-      .then((response) => {
-        if (response.ok) {
-          return response.json();
-        }
-        throw new Error("Wrong client id");
-      })
-      .then((response) => {
-        return response.session;
-      })
-      .catch((error) => {
-        console.log("[EVENT] " + error);
-      });
-  };
-
   const stopLens = () => {
     ws.close();
     videoRef.srcObject.getTracks().forEach((track) => track.stop());
@@ -491,19 +468,25 @@ const VeryfiLens = (function () {
       const script = document.createElement("script");
       script.setAttribute("async", "");
       script.setAttribute("type", "text/javascript");
+      script.src =
+        "https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.10.0-beta.1/dist/opencv.min.js";
+      document.body.appendChild(script);
+
       script.addEventListener("load", () => {
-        if (cv.getBuildInformation) {
-          console.log("OpenCV loaded successfully");
-          resolve();
-        } else {
-          reject(new Error("OpenCV load failed"));
-        }
+        const checkOpenCV = () => {
+          if (cv && cv.getBuildInformation) {
+            console.log("OpenCV loaded successfully");
+            resolve();
+          } else {
+            setTimeout(checkOpenCV, 100); // Retry after 100ms
+          }
+        };
+        checkOpenCV();
       });
+
       script.addEventListener("error", () => {
         reject(new Error("Failed to load OpenCV script"));
       });
-      script.src = "https://cdn.jsdelivr.net/npm/opencv.js@1.2.1/opencv.min.js";
-      document.body.appendChild(script);
     });
   }
 
@@ -536,6 +519,9 @@ const VeryfiLens = (function () {
 
     variance = meanStdDev.data64F[0];
     refVariance = refMeanStdDev.data64F[0];
+
+    // console.log("variance", variance);
+    // console.log("reference variance", refVariance);
 
     grayscale.delete();
     laplacian.delete();
@@ -651,7 +637,7 @@ const VeryfiLens = (function () {
     init: async (session, client_id) => {
       userAgent = navigator.userAgent;
       device_uuid = new DeviceUUID(userAgent).get();
-      console.log("[EVENT] Device ID", getDeviceID(device_uuid));
+      // docReady(client_id, "lens_for_browser_socket", "receipt");
       if (session) {
         if (!cvReady) {
           try {
@@ -699,15 +685,9 @@ const VeryfiLens = (function () {
       const finalImage = await cropImage();
       setImage && setImage(finalImage);
       console.log("[EVENT] hasCoordinates: ", hasCoordinates);
-      if (hasCoordinates) setIsDocument(true);
       stopLens();
       setIsEditing && setIsEditing(true);
       return finalImage;
-    },
-
-    createNewSession: async (clientId) => {
-      await fetchSessionId(clientId);
-      setClientId(clientId);
     },
 
     setUserAgent: (ua) => {
@@ -797,6 +777,10 @@ const VeryfiLens = (function () {
       setIsDocument(false);
     },
 
+    toggleTorch: () => {
+      toggleTorchLight();
+    },
+
     getDeviceData: async () => {
       if (!device_uuid) {
         userAgent = navigator.userAgent;
@@ -810,10 +794,6 @@ const VeryfiLens = (function () {
         uuid: device_uuid,
         source: "lens.web",
       };
-    },
-
-    toggleTorch: () => {
-      toggleTorchLight();
     },
   };
 })();

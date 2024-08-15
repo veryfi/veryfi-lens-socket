@@ -26,6 +26,7 @@ declare module 'veryfi-lens-socket' {
         uuid: string;
         source: string;
       }>;
+      toggleTorch(): void;
     }
   
     const VeryfiLensInstance: VeryfiLensSocket;
